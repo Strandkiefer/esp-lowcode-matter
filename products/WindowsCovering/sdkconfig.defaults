@@ -1,2 +1,1 @@
-# Button
-CONFIG_BUTTON_DRIVER_USE_HP_GPIO=y
+# No additional defaults required; button driver configuration removed.
