@@ -1,40 +1,33 @@
-# Socket | 2 Channel
+# Windows Covering | Dual Relay
 
 ## Description
 
-A dual-channel smart socket featuring independent relay control, unified status indication via WS2812 RGB LED, and multi-button user interactions:
+A dual-channel window covering controller that drives motor directions exclusively through relay outputs. The firmware operates
+without local buttons or visual indicators and relies on Matter commands or automations for control.
 
-* **Dual Relay Control**: Independently controls two power channels via GPIO-connected relays
-* **User Input**:
-  * Dedicated single-button press toggles each socket state (Button1: Endpoint1, Button2: Endpoint2)
-  * Long press on either button triggers factory reset
-* **Unified Status Indication**: Single WS2812 RGB LED displays combined socket states and system events
+* **Dual Relay Control**: Independently switches two relay channels that can be wired to "open" and "close" inputs of a motor
+  controller.
+* **Remote-Only Operation**: No GPIOs are reserved for buttons or LEDs, keeping the hardware footprint minimal.
 * **Matter Data Model Specification**:
-  * **Device Type** : `On/Off Plug`
+  * **Device Type** : `Window Covering`
 
 ## Hardware Configuration
-
-<img src="../../docs/images/product_socket_2_channel.png" alt="Socket 2 Channel" width="500"/>
 
 The following hardware components are used for this product:
 
 * **Devkit**: [M5Stack Nano C6 Dev Kit](https://shop.m5stack.com/products/m5stack-nanoc6-dev-kit?srsltid=AfmBOooXsbm_fgpDyK1yWqgPOwtjrL3WksxGlhmRKDZFmVj2omLLbWDX)
-* **Power Relays**: Two single-channel relay
-* **Indicator**: On-board WS2812 RGB LED
-* **Buttons**: Two on-board or external push-buttons
+* **Power Relays**: Two single-channel relays wired to the actuator or motor controller inputs
 
 ### Pin Assignment
 
-| Peripheral      | GPIO Pin | Function                  |
-|-----------------|----------|---------------------------|
-| Relay 1 Control | GPIO2    | Primary power switching   |
-| Relay 2 Control | GPIO3    | Secondary power switching |
-| Button 1        | GPIO9    | Primary socket control    |
-| Button 2        | GPIO10   | Secondary socket control  |
-| RGB LED         | GPIO8    | Unified status indication |
+| Peripheral      | GPIO Pin | Function                    |
+|-----------------|----------|-----------------------------|
+| Relay 1 Control | GPIO2    | Primary direction / channel |
+| Relay 2 Control | GPIO3    | Secondary direction / channel |
+| (Not used)      | —        | —                           |
 
 > **Note**: GPIO assignments can be customized by modifying the following macros in **app_driver.cpp**:
-> `RELAY1_GPIO_NUM`, `RELAY2_GPIO_NUM`, `BUTTON1_GPIO_NUM`, `BUTTON2_GPIO_NUM`, `INDICATOR_GPIO_NUM`
+> `RELAY1_GPIO_NUM`, `RELAY2_GPIO_NUM`
 
 ## Understanding Code
 
@@ -42,52 +35,39 @@ The following hardware components are used for this product:
 
 The `app_driver_init()` function performs the following:
 
-* Initializes both relay GPIOs as outputs
-* Configures two independent buttons with debounce handling:
-  * **Button1**: Toggles Endpoint1 (Socket1) on single-click
-  * **Button2**: Toggles Endpoint2 (Socket2) on single-click
-  * Both buttons trigger factory reset on long-press
-* Initializes the WS2812 RGB LED for combined status indication
+* Configures both relay GPIOs as outputs
+* Skips any button or indicator setup, so the firmware depends solely on the relay component
 
 ### Core Functions
 
 * **Power Control**:
-  * `app_driver_toggle_socket_state_button_callback` handles both endpoints using `endpoint_id` parameter
-  * `app_driver_set_socket_state` manages relay states individually while providing unified LED feedback
-  * State changes are reported to the system with proper endpoint differentiation
-
-* **Visual Indicators**:
-  * `LOW_CODE_EVENT_SETUP_MODE_START`: starts blinking effect, to indicate setup mode activation (2000ms interval)
-  * `LOW_CODE_EVENT_SETUP_MODE_END`: stops blinking effect, to indicate setup mode has ended.
-  * `LOW_CODE_EVENT_READY`: displays full brightness white light to indicate device is ready
+  * `app_driver_set_socket_state` toggles the appropriate relay based on the endpoint identifier and logs the action for
+    diagnostics.
+* **Event Handling**:
+  * `app_driver_event_handler` prints lifecycle events received from the low-code system. Without LEDs, events are surfaced for
+    debugging through the serial console.
 
 ### Multi-Endpoint Implementation
 
 * Endpoint mapping:
-  * Endpoint1 (ID=1): Controlled by Button1/RELAY1_GPIO_NUM
-  * Endpoint2 (ID=2): Controlled by Button2/RELAY2_GPIO_NUM
+  * Endpoint1 (ID = 1): Controls the relay connected to `RELAY1_GPIO_NUM`
+  * Endpoint2 (ID = 2): Controls the relay connected to `RELAY2_GPIO_NUM`
 * State tracking:
-  * `socket_states[]` array maintains individual relay states
-  * Button callbacks uses `endpoint_id` parameter for proper state management
+  * `socket_states[]` maintains the current relay states so they can be reported back to the Matter data model when required
 
 ### Extending Functionality
 
 To add more relay channels to the system, implement the following changes:
 
 * **Matter Data Model Extension**:
-  * Add the required number of On/Off Plug Device Type endpoint to the Matter cluster configuration.
-  * Run `Upload Configuration` command to upload the updated data model on the device.
-
-* **Configure Additional Button Input**:
-  * Initialize required GPIO button.
-  * Register a **single-click event callback** using `button_driver_register_cb` for all the buttons.
-  * Inside the callback:
-    * Toggle the state of the second relay.
-    * Report the new relay state to the system using `low_code_feature_update_to_system`.
+  * Add the required number of Window Covering endpoints to the Matter cluster configuration.
+  * Run `Upload Configuration` to push the updated data model to the device.
+* **Optional Local Inputs**:
+  * If physical control is desired, refer to the `socket` product for an example of registering button callbacks that invoke
+    `app_driver_set_socket_state`.
 
 ## Related Documentation
 
-* [Socket | 1 Channel](../socket/README.md)
 * [Programmer's Model](../../docs/programmer_model.md)
 * [Components](../../components/README.md)
 * [Drivers](../../drivers/README.md)
