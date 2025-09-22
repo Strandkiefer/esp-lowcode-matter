@@ -22,12 +22,12 @@
 #include <hal/gpio_types.h>
 #include "sdkconfig.h"
 
+
 #include "app_priv.h"
 
 
 #define RELAY1_GPIO_NUM ((gpio_num_t)1)
 #define RELAY2_GPIO_NUM ((gpio_num_t)2)
-
 
 static const char *TAG = "app_driver";
 
@@ -60,6 +60,7 @@ static void busy_wait_half_second(void)
     }
 }
 
+
 int app_driver_init()
 {
     /* Initialize relays */
@@ -67,6 +68,7 @@ int app_driver_init()
     relay_driver_set_power(RELAY1_GPIO_NUM, true);
     relay_driver_init(RELAY2_GPIO_NUM);
     relay_driver_set_power(RELAY2_GPIO_NUM, true);
+
 
     printf("%s: App driver initialized\n", TAG);
     return 0;
@@ -95,7 +97,6 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
         relay_driver_set_power(relay_gpio, true);
         socket_states[socket_index] = false;
     }
-
     return 0;
 }
 
