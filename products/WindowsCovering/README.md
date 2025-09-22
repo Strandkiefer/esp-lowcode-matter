@@ -63,8 +63,7 @@ The `app_driver_init()` function performs the following:
 
   * `socket_states[]` captures the requested state momentarily so the driver can acknowledge commands before restoring the
     resting `false` value after each pulse.
-
-
+    
 ### Extending Functionality
 
 To add more relay channels to the system, implement the following changes:

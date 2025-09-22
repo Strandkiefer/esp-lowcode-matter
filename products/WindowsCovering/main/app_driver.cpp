@@ -22,7 +22,6 @@
 #include <hal/gpio_types.h>
 #include "sdkconfig.h"
 
-
 #include "app_priv.h"
 
 
@@ -32,6 +31,23 @@
 static const char *TAG = "app_driver";
 
 static bool socket_states[2] = {false, false};
+
+static void report_socket_state(uint16_t endpoint_id)
+{
+    uint8_t socket_index = endpoint_id - 1;
+    low_code_feature_data_t update_data = {};
+
+    update_data.details.endpoint_id = endpoint_id;
+    update_data.details.feature_id = LOW_CODE_FEATURE_ID_POWER;
+    update_data.value.type = LOW_CODE_VALUE_TYPE_BOOLEAN;
+    update_data.value.value_len = sizeof(bool);
+    update_data.value.value = reinterpret_cast<uint8_t *>(&socket_states[socket_index]);
+
+    int err = low_code_feature_update_to_system(&update_data);
+    if (err != ESP_OK) {
+        printf("%s: Failed to report socket %u state (%d)\n", TAG, endpoint_id, err);
+    }
+}
 
 static void busy_wait_half_second(void)
 {
@@ -48,7 +64,7 @@ static void busy_wait_half_second(void)
 #else
     const uint32_t cpu_freq_mhz = 160;
 #endif
-    uint32_t iterations = (cpu_freq_mhz * 25000UL) / 3UL;
+    uint32_t iterations = (cpu_freq_mhz * 500000UL) / 3UL;
     if (iterations == 0) {
         iterations = 1;
     }
@@ -69,7 +85,6 @@ int app_driver_init()
     relay_driver_init(RELAY2_GPIO_NUM);
     relay_driver_set_power(RELAY2_GPIO_NUM, true);
 
-
     printf("%s: App driver initialized\n", TAG);
     return 0;
 }
@@ -82,10 +97,28 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
     }
 
     uint8_t socket_index = endpoint_id - 1;
-    socket_states[socket_index] = state;
+
     printf("%s: Set socket %u state to %d\n", TAG, endpoint_id, state);
 
     gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
+
+    if (state) {
+        socket_states[socket_index] = true;
+        report_socket_state(endpoint_id);
+
+        relay_driver_set_power(relay_gpio, false);
+        busy_wait_half_second();
+        relay_driver_set_power(relay_gpio, true);
+
+        socket_states[socket_index] = false;
+        report_socket_state(endpoint_id);
+        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
+    } else {
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+        report_socket_state(endpoint_id);
+    }
+
 
     if (state) {
         relay_driver_set_power(relay_gpio, false);
