@@ -28,7 +28,6 @@
 #define RELAY1_GPIO_NUM ((gpio_num_t)1)
 #define RELAY2_GPIO_NUM ((gpio_num_t)2)
 
-
 static const char *TAG = "app_driver";
 
 static bool socket_states[2] = {false, false};
@@ -77,6 +76,7 @@ static void busy_wait_half_second(void)
     }
 }
 
+
 int app_driver_init()
 {
     /* Initialize relays */
@@ -97,6 +97,7 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
     }
 
     uint8_t socket_index = endpoint_id - 1;
+
     printf("%s: Set socket %u state to %d\n", TAG, endpoint_id, state);
 
     gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
@@ -118,6 +119,17 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
         report_socket_state(endpoint_id);
     }
 
+
+    if (state) {
+        relay_driver_set_power(relay_gpio, false);
+        busy_wait_half_second();
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
+    } else {
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+    }
     return 0;
 }
 

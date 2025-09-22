@@ -107,7 +107,7 @@ static bool hp_gpio_intr_handler_registered = false;
 
 static int hp_gpio_sw_intr_handler(void *arg)
 {
-    uint32_t *pin_mask = (uint32_t*) esp_amp_sys_info_get(0x00, NULL);
+    uint32_t *pin_mask = (uint32_t*) esp_amp_sys_info_get(0x00, NULL, SYS_INFO_CAP_HP);
     button_driver_isr_handler(pin_mask);
     return 0;
 }
