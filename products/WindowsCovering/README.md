@@ -26,6 +26,7 @@ The following hardware components are used for this product:
 | Relay 2 Control | GPIO3    | Secondary direction / channel |
 | (Not used)      | —        | —                           |
 
+
 > **Note**: GPIO assignments can be customized by modifying the following macros in **app_driver.cpp**:
 > `RELAY1_GPIO_NUM`, `RELAY2_GPIO_NUM`
 
