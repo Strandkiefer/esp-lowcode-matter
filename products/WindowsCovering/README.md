@@ -20,11 +20,12 @@ The following hardware components are used for this product:
 
 ### Pin Assignment
 
-| Peripheral      | GPIO Pin | Function                      |
-|-----------------|----------|-------------------------------|
-| Relay 1 Control | GPIO1    | Primary direction / channel   |
-| Relay 2 Control | GPIO2    | Secondary direction / channel |
-| (Not used)      | —        | —                             |
+| Peripheral      | GPIO Pin | Function                    |
+|-----------------|----------|-----------------------------|
+| Relay 1 Control | GPIO2    | Primary direction / channel |
+| Relay 2 Control | GPIO3    | Secondary direction / channel |
+| (Not used)      | —        | —                           |
+
 
 > **Note**: GPIO assignments can be customized by modifying the following macros in **app_driver.cpp**:
 > `RELAY1_GPIO_NUM`, `RELAY2_GPIO_NUM`

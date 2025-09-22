@@ -22,8 +22,10 @@
 
 #include "app_priv.h"
 
-#define RELAY1_GPIO_NUM ((gpio_num_t)1)
-#define RELAY2_GPIO_NUM ((gpio_num_t)2)
+
+#define RELAY1_GPIO_NUM ((gpio_num_t)2)
+#define RELAY2_GPIO_NUM ((gpio_num_t)3)
+
 
 static const char *TAG = "app_driver";
 
@@ -47,7 +49,8 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
 
     /* Set appropriate relay */
     gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
-    relay_driver_set_power(relay_gpio, state);
+
+    relay_driver_set_power(relay_gpio, !state);
 
     return 0;
 }
