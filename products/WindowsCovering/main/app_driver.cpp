@@ -23,8 +23,8 @@
 #include "app_priv.h"
 
 
-#define RELAY1_GPIO_NUM ((gpio_num_t)2)
-#define RELAY2_GPIO_NUM ((gpio_num_t)3)
+#define RELAY1_GPIO_NUM ((gpio_num_t)1)
+#define RELAY2_GPIO_NUM ((gpio_num_t)2)
 
 
 static const char *TAG = "app_driver";
