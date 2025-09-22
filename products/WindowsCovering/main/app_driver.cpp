@@ -105,8 +105,8 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
     if (state) {
         socket_states[socket_index] = true;
         report_socket_state(endpoint_id);
-
         relay_driver_set_power(relay_gpio, false);
+
         busy_wait_half_second();
         relay_driver_set_power(relay_gpio, true);
 
@@ -118,18 +118,7 @@ int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
         socket_states[socket_index] = false;
         report_socket_state(endpoint_id);
     }
-
-
-    if (state) {
-        relay_driver_set_power(relay_gpio, false);
-        busy_wait_half_second();
-        relay_driver_set_power(relay_gpio, true);
-        socket_states[socket_index] = false;
-        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
-    } else {
-        relay_driver_set_power(relay_gpio, true);
-        socket_states[socket_index] = false;
-    }
+  
     return 0;
 }
 
