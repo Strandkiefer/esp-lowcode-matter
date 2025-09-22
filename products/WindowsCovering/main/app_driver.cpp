@@ -64,7 +64,7 @@ static void busy_wait_half_second(void)
 #else
     const uint32_t cpu_freq_mhz = 160;
 #endif
-    uint32_t iterations = (cpu_freq_mhz * 500000UL) / 3UL;
+    uint32_t iterations = (cpu_freq_mhz * 25000UL) / 3UL;
     if (iterations == 0) {
         iterations = 1;
     }
