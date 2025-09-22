@@ -13,12 +13,15 @@
 // limitations under the License.
 
 #include <stdio.h>
+#include <stdint.h>
 
 #include <system.h>
 #include <low_code.h>
 
 #include <relay_driver.h>
 #include <hal/gpio_types.h>
+#include "sdkconfig.h"
+
 
 #include "app_priv.h"
 
@@ -26,16 +29,46 @@
 #define RELAY1_GPIO_NUM ((gpio_num_t)1)
 #define RELAY2_GPIO_NUM ((gpio_num_t)2)
 
-
 static const char *TAG = "app_driver";
 
 static bool socket_states[2] = {false, false};
+
+static void busy_wait_half_second(void)
+{
+    /*
+     * Estimate the number of loop iterations required to reach roughly 500 ms.
+     * Each loop expands to a handful of RISC-V instructions, so dividing the
+     * CPU frequency by a small constant yields a coarse but repeatable delay
+     * without relying on timers that are unavailable to the LP core.
+     */
+#if defined(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ)
+    const uint32_t cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+#elif defined(CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ)
+    const uint32_t cpu_freq_mhz = CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ;
+#else
+    const uint32_t cpu_freq_mhz = 160;
+#endif
+    uint32_t iterations = (cpu_freq_mhz * 500000UL) / 3UL;
+    if (iterations == 0) {
+        iterations = 1;
+    }
+
+    uint32_t counter = 0;
+    while (counter < iterations) {
+        __asm__ __volatile__("nop");
+        ++counter;
+    }
+}
+
 
 int app_driver_init()
 {
     /* Initialize relays */
     relay_driver_init(RELAY1_GPIO_NUM);
+    relay_driver_set_power(RELAY1_GPIO_NUM, true);
     relay_driver_init(RELAY2_GPIO_NUM);
+    relay_driver_set_power(RELAY2_GPIO_NUM, true);
+
 
     printf("%s: App driver initialized\n", TAG);
     return 0;
@@ -43,15 +76,27 @@ int app_driver_init()
 
 int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
 {
+    if ((endpoint_id < 1) || (endpoint_id > 2)) {
+        printf("%s: Invalid endpoint %u\n", TAG, endpoint_id);
+        return -1;
+    }
+
     uint8_t socket_index = endpoint_id - 1;
     socket_states[socket_index] = state;
-    printf("%s: Set socket %d state to %d\n", TAG, endpoint_id, state);
+    printf("%s: Set socket %u state to %d\n", TAG, endpoint_id, state);
 
-    /* Set appropriate relay */
     gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
 
-    relay_driver_set_power(relay_gpio, !state);
-
+    if (state) {
+        relay_driver_set_power(relay_gpio, false);
+        busy_wait_half_second();
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
+    } else {
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+    }
     return 0;
 }
 

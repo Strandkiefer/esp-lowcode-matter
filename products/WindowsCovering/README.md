@@ -7,6 +7,10 @@ without local buttons or visual indicators and relies on Matter commands or auto
 
 * **Dual Relay Control**: Independently switches two relay channels that can be wired to "open" and "close" inputs of a motor
   controller.
+
+* **Momentary Drive Logic**: Each relay is pulsed for roughly half a second through a simple counter-based busy wait so the
+  active-low coils automatically release after every command.
+
 * **Remote-Only Operation**: No GPIOs are reserved for buttons or LEDs, keeping the hardware footprint minimal.
 * **Matter Data Model Specification**:
   * **Device Type** : `Window Covering`
@@ -22,8 +26,8 @@ The following hardware components are used for this product:
 
 | Peripheral      | GPIO Pin | Function                    |
 |-----------------|----------|-----------------------------|
-| Relay 1 Control | GPIO2    | Primary direction / channel |
-| Relay 2 Control | GPIO3    | Secondary direction / channel |
+| Relay 1 Control | GPIO1    | Primary direction / channel |
+| Relay 2 Control | GPIO2    | Secondary direction / channel |
 | (Not used)      | —        | —                           |
 
 
@@ -42,8 +46,10 @@ The `app_driver_init()` function performs the following:
 ### Core Functions
 
 * **Power Control**:
-  * `app_driver_set_socket_state` toggles the appropriate relay based on the endpoint identifier and logs the action for
-    diagnostics.
+
+  * `app_driver_set_socket_state` validates the requested endpoint, pulses the appropriate relay for ~0.5 seconds, and then
+    resets the stored state to reflect the resting (off) coil level.
+
 * **Event Handling**:
   * `app_driver_event_handler` prints lifecycle events received from the low-code system. Without LEDs, events are surfaced for
     debugging through the serial console.
@@ -54,7 +60,10 @@ The `app_driver_init()` function performs the following:
   * Endpoint1 (ID = 1): Controls the relay connected to `RELAY1_GPIO_NUM`
   * Endpoint2 (ID = 2): Controls the relay connected to `RELAY2_GPIO_NUM`
 * State tracking:
-  * `socket_states[]` maintains the current relay states so they can be reported back to the Matter data model when required
+
+  * `socket_states[]` captures the requested state momentarily so the driver can acknowledge commands before restoring the
+    resting `false` value after each pulse.
+
 
 ### Extending Functionality
 
