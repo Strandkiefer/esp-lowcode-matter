@@ -13,115 +13,77 @@
 // limitations under the License.
 
 #include <stdio.h>
+#include <stdint.h>
 
 #include <system.h>
 #include <low_code.h>
 
-#include <button_driver.h>
 #include <relay_driver.h>
-#include <light_driver.h>
+#include <hal/gpio_types.h>
+#include "sdkconfig.h"
 
 #include "app_priv.h"
 
-#define BUTTON1_GPIO_NUM ((gpio_num_t)9)
-#define BUTTON2_GPIO_NUM ((gpio_num_t)10)
-#define RELAY1_GPIO_NUM ((gpio_num_t)2)
-#define RELAY2_GPIO_NUM ((gpio_num_t)3)
-#define INDICATOR_GPIO_NUM ((gpio_num_t)8)
+
+#define RELAY1_GPIO_NUM ((gpio_num_t)1)
+#define RELAY2_GPIO_NUM ((gpio_num_t)2)
+
 
 static const char *TAG = "app_driver";
 
 static bool socket_states[2] = {false, false};
 
-static void app_driver_toggle_socket_state_button_callback(void *arg, void *data)
+static void report_socket_state(uint16_t endpoint_id)
 {
-    uint8_t endpoint_id = (uint8_t)(uintptr_t)data;
     uint8_t socket_index = endpoint_id - 1;
+    low_code_feature_data_t update_data = {};
 
-    socket_states[socket_index] = !socket_states[socket_index];
-    printf("%s: Set socket %d state to %d\n", TAG, endpoint_id, socket_states[socket_index]);
-    app_driver_set_socket_state(endpoint_id, socket_states[socket_index]);
+    update_data.details.endpoint_id = endpoint_id;
+    update_data.details.feature_id = LOW_CODE_FEATURE_ID_POWER;
+    update_data.value.type = LOW_CODE_VALUE_TYPE_BOOLEAN;
+    update_data.value.value_len = sizeof(bool);
+    update_data.value.value = reinterpret_cast<uint8_t *>(&socket_states[socket_index]);
 
-    low_code_feature_data_t update_data = {
-        .details = {
-            .endpoint_id = endpoint_id,
-            .feature_id = LOW_CODE_FEATURE_ID_POWER
-        },
-        .value = {
-            .type = LOW_CODE_VALUE_TYPE_BOOLEAN,
-            .value_len = sizeof(bool),
-            .value = (uint8_t*)&socket_states[socket_index],
-        },
-    };
-
-    low_code_feature_update_to_system(&update_data);
+    int err = low_code_feature_update_to_system(&update_data);
+    if (err != ESP_OK) {
+        printf("%s: Failed to report socket %u state (%d)\n", TAG, endpoint_id, err);
+    }
 }
 
-static void app_driver_trigger_factory_reset_button_callback(void *arg, void *data)
+static void busy_wait_half_second(void)
 {
-    /* Update by sending event */
-    low_code_event_t event = {
-        .event_type = LOW_CODE_EVENT_FACTORY_RESET
-    };
+    /*
+     * Estimate the number of loop iterations required to reach roughly 500 ms.
+     * Each loop expands to a handful of RISC-V instructions, so dividing the
+     * CPU frequency by a small constant yields a coarse but repeatable delay
+     * without relying on timers that are unavailable to the LP core.
+     */
+#if defined(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ)
+    const uint32_t cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+#elif defined(CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ)
+    const uint32_t cpu_freq_mhz = CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ;
+#else
+    const uint32_t cpu_freq_mhz = 160;
+#endif
+    uint32_t iterations = (cpu_freq_mhz * 500000UL) / 3UL;
+    if (iterations == 0) {
+        iterations = 1;
+    }
 
-    low_code_event_to_system(&event);
-    printf("%s: Factory reset triggered\n", TAG);
+    uint32_t counter = 0;
+    while (counter < iterations) {
+        __asm__ __volatile__("nop");
+        ++counter;
+    }
 }
 
 int app_driver_init()
 {
     /* Initialize relays */
     relay_driver_init(RELAY1_GPIO_NUM);
+    relay_driver_set_power(RELAY1_GPIO_NUM, true);
     relay_driver_init(RELAY2_GPIO_NUM);
-
-    /* Initialize button 1 */
-    button_config_t btn1_cfg = {
-        .gpio_num = BUTTON1_GPIO_NUM,
-        .pullup_en = 1,
-        .active_level = 0,
-    };
-    button_handle_t btn1_handle = button_driver_create(&btn1_cfg);
-    if (!btn1_handle) {
-        printf("Failed to create button 1\n");
-        return -1;
-    }
-
-    /* Register callbacks for button 1 */
-    button_driver_register_cb(btn1_handle, BUTTON_SINGLE_CLICK, app_driver_toggle_socket_state_button_callback, (void*)1);
-    button_driver_register_cb(btn1_handle, BUTTON_LONG_PRESS_UP, app_driver_trigger_factory_reset_button_callback, NULL);
-
-    /* Initialize button 2 */
-    button_config_t btn2_cfg = {
-        .gpio_num = BUTTON2_GPIO_NUM,
-        .pullup_en = 1,
-        .active_level = 0,
-    };
-    button_handle_t btn2_handle = button_driver_create(&btn2_cfg);
-    if (!btn2_handle) {
-        printf("Failed to create button 2\n");
-        return -1;
-    }
-
-    /* Register callbacks for button 2 */
-    button_driver_register_cb(btn2_handle, BUTTON_SINGLE_CLICK, app_driver_toggle_socket_state_button_callback, (void*)2);
-    button_driver_register_cb(btn2_handle, BUTTON_LONG_PRESS_UP, app_driver_trigger_factory_reset_button_callback, NULL);
-
-    /* Initialize common indicator */
-    light_driver_config_t cfg = {
-        .device_type = LIGHT_DEVICE_TYPE_WS2812,
-        .channel_comb = LIGHT_CHANNEL_COMB_3CH_RGB,
-        .io_conf = {
-            .ws2812_io = {
-                .ctrl_io = INDICATOR_GPIO_NUM,
-            },
-        },
-        .min_brightness = 0,
-        .max_brightness = 100,
-    };
-    light_driver_init(&cfg);
-
-    /* Set initial LED states */
-    light_driver_set_power(socket_states[0] || socket_states[1]);
+    relay_driver_set_power(RELAY2_GPIO_NUM, true);
 
     printf("%s: App driver initialized\n", TAG);
     return 0;
@@ -129,16 +91,32 @@ int app_driver_init()
 
 int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
 {
+    if ((endpoint_id < 1) || (endpoint_id > 2)) {
+        printf("%s: Invalid endpoint %u\n", TAG, endpoint_id);
+        return -1;
+    }
+
     uint8_t socket_index = endpoint_id - 1;
-    socket_states[socket_index] = state;
-    printf("%s: Set socket %d state to %d\n", TAG, endpoint_id, state);
+    printf("%s: Set socket %u state to %d\n", TAG, endpoint_id, state);
 
-    /* Set appropriate relay */
     gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
-    relay_driver_set_power(relay_gpio, state);
 
-    bool any_socket_on = socket_states[0] || socket_states[1];
-    light_driver_set_power(any_socket_on);
+    if (state) {
+        socket_states[socket_index] = true;
+        report_socket_state(endpoint_id);
+
+        relay_driver_set_power(relay_gpio, false);
+        busy_wait_half_second();
+        relay_driver_set_power(relay_gpio, true);
+
+        socket_states[socket_index] = false;
+        report_socket_state(endpoint_id);
+        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
+    } else {
+        relay_driver_set_power(relay_gpio, true);
+        socket_states[socket_index] = false;
+        report_socket_state(endpoint_id);
+    }
 
     return 0;
 }
@@ -147,25 +125,13 @@ int app_driver_event_handler(low_code_event_t *event)
 {
     /* Get the events. Approriate indicators should be shown to the user based on the event. */
     printf("%s: Received event: %d\n", TAG, event->event_type);
-    light_effect_config_t effect_config = {
-        .type = LIGHT_EFFECT_INVALID,
-        .mode = LIGHT_WORK_MODE_COLOR, /* Since it is a single channel LED */
-        .max_brightness = 100,
-        .min_brightness = 10
-    };
-
     /* Handle the events from low_code_event_type_t */
     switch (event->event_type) {
         case LOW_CODE_EVENT_SETUP_MODE_START:
             printf("%s: Setup mode started\n", TAG);
-            /* Start Indication */
-            effect_config.type = LIGHT_EFFECT_BLINK;
-            light_driver_effect_start(&effect_config, 2000, 120000);
             break;
         case LOW_CODE_EVENT_SETUP_MODE_END:
             printf("%s: Setup mode ended\n", TAG);
-            /* Stop Indication */
-            light_driver_effect_stop();
             break;
         case LOW_CODE_EVENT_SETUP_DEVICE_CONNECTED:
             printf("%s: Device connected during setup\n", TAG);
