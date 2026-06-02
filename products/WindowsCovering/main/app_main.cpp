@@ -43,6 +43,15 @@ static const char *TAG = "app_main";
 
 #define WC_ATTR_TARGET_POSITION_LIFT_PERCENT_100THS 0x000B
 
+/* Non-target Window Covering attributes present in our data model. A write to
+ * any of these (for example the mandatory, writable Mode attribute) must never
+ * be decoded as a command. Attribute 0x0000 (Type) is intentionally omitted so
+ * we never clash with a genuine command that may arrive with attribute_id 0. */
+#define WC_ATTR_CONFIG_STATUS                       0x0007
+#define WC_ATTR_OPERATIONAL_STATUS                  0x000A
+#define WC_ATTR_END_PRODUCT_TYPE                    0x000D
+#define WC_ATTR_MODE                                0x0017
+
 /* In Matter a lift percentage of 0 means fully open and 100% (10000 in
  * percent-100ths) means fully closed. We use the mid point to pick a
  * direction for this open-loop, position-less controller. */
@@ -101,6 +110,19 @@ int feature_update_from_system(low_code_feature_data_t *data)
             printf("%s: Window covering target lift %u -> %s\n", TAG, target,
                    action == APP_COVERING_OPEN ? "open" : "close");
             return app_driver_drive_covering(endpoint_id, action);
+        }
+
+        /* The framework reuses this struct for commands and attribute updates
+         * and leaves command_id at 0 (== UpOrOpen) for attribute writes, so
+         * ignore known non-target attribute updates before decoding a command
+         * to avoid spuriously pulsing the open relay. */
+        if (attribute_id == WC_ATTR_CONFIG_STATUS ||
+            attribute_id == WC_ATTR_OPERATIONAL_STATUS ||
+            attribute_id == WC_ATTR_END_PRODUCT_TYPE ||
+            attribute_id == WC_ATTR_MODE) {
+            printf("%s: Ignoring Window Covering attribute 0x%04x update\n", TAG,
+                   (unsigned)attribute_id);
+            return 0;
         }
 
         app_covering_action_t action = action_from_command(command_id);
