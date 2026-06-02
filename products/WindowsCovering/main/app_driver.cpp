@@ -24,30 +24,17 @@
 
 #include "app_priv.h"
 
+/* Relay 1 drives the "open / up" direction, relay 2 the "close / down"
+ * direction of a single motorised covering. */
+#define RELAY_OPEN_GPIO_NUM  ((gpio_num_t)1)
+#define RELAY_CLOSE_GPIO_NUM ((gpio_num_t)2)
 
-#define RELAY1_GPIO_NUM ((gpio_num_t)1)
-#define RELAY2_GPIO_NUM ((gpio_num_t)2)
+/* The relays are wired active-low: driving the GPIO low energises the relay,
+ * driving it high releases it. */
+#define RELAY_ENERGIZED      false
+#define RELAY_RELEASED       true
 
 static const char *TAG = "app_driver";
-
-static bool socket_states[2] = {false, false};
-
-static void report_socket_state(uint16_t endpoint_id)
-{
-    uint8_t socket_index = endpoint_id - 1;
-    low_code_feature_data_t update_data = {};
-
-    update_data.details.endpoint_id = endpoint_id;
-    update_data.details.feature_id = LOW_CODE_FEATURE_ID_POWER;
-    update_data.value.type = LOW_CODE_VALUE_TYPE_BOOLEAN;
-    update_data.value.value_len = sizeof(bool);
-    update_data.value.value = reinterpret_cast<uint8_t *>(&socket_states[socket_index]);
-
-    int err = low_code_feature_update_to_system(&update_data);
-    if (err != ESP_OK) {
-        printf("%s: Failed to report socket %u state (%d)\n", TAG, endpoint_id, err);
-    }
-}
 
 static void busy_wait_half_second(void)
 {
@@ -76,49 +63,56 @@ static void busy_wait_half_second(void)
     }
 }
 
+static void pulse_relay(gpio_num_t relay_gpio)
+{
+    relay_driver_set_power(relay_gpio, RELAY_ENERGIZED);
+    busy_wait_half_second();
+    relay_driver_set_power(relay_gpio, RELAY_RELEASED);
+}
+
+static void release_all_relays(void)
+{
+    relay_driver_set_power(RELAY_OPEN_GPIO_NUM, RELAY_RELEASED);
+    relay_driver_set_power(RELAY_CLOSE_GPIO_NUM, RELAY_RELEASED);
+}
 
 int app_driver_init()
 {
-    /* Initialize relays */
-    relay_driver_init(RELAY1_GPIO_NUM);
-    relay_driver_set_power(RELAY1_GPIO_NUM, true);
-    relay_driver_init(RELAY2_GPIO_NUM);
-    relay_driver_set_power(RELAY2_GPIO_NUM, true);
+    /* Initialize both relays in the released (resting) state */
+    relay_driver_init(RELAY_OPEN_GPIO_NUM);
+    relay_driver_init(RELAY_CLOSE_GPIO_NUM);
+    release_all_relays();
 
     printf("%s: App driver initialized\n", TAG);
     return 0;
 }
 
-int app_driver_set_socket_state(uint16_t endpoint_id, bool state)
+int app_driver_drive_covering(uint16_t endpoint_id, app_covering_action_t action)
 {
-    if ((endpoint_id < 1) || (endpoint_id > 2)) {
+    if (endpoint_id != 1) {
         printf("%s: Invalid endpoint %u\n", TAG, endpoint_id);
         return -1;
     }
 
-    uint8_t socket_index = endpoint_id - 1;
-
-    printf("%s: Set socket %u state to %d\n", TAG, endpoint_id, state);
-
-    gpio_num_t relay_gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
-
-    if (state) {
-        socket_states[socket_index] = true;
-        report_socket_state(endpoint_id);
-        relay_driver_set_power(relay_gpio, false);
-
-        busy_wait_half_second();
-        relay_driver_set_power(relay_gpio, true);
-
-        socket_states[socket_index] = false;
-        report_socket_state(endpoint_id);
-        printf("%s: Socket %u reset to off after pulse\n", TAG, endpoint_id);
-    } else {
-        relay_driver_set_power(relay_gpio, true);
-        socket_states[socket_index] = false;
-        report_socket_state(endpoint_id);
+    switch (action) {
+        case APP_COVERING_OPEN:
+            printf("%s: Covering open (pulse open relay)\n", TAG);
+            /* Make sure the opposite direction is not engaged before moving */
+            relay_driver_set_power(RELAY_CLOSE_GPIO_NUM, RELAY_RELEASED);
+            pulse_relay(RELAY_OPEN_GPIO_NUM);
+            break;
+        case APP_COVERING_CLOSE:
+            printf("%s: Covering close (pulse close relay)\n", TAG);
+            relay_driver_set_power(RELAY_OPEN_GPIO_NUM, RELAY_RELEASED);
+            pulse_relay(RELAY_CLOSE_GPIO_NUM);
+            break;
+        case APP_COVERING_STOP:
+        default:
+            printf("%s: Covering stop (release relays)\n", TAG);
+            release_all_relays();
+            break;
     }
-  
+
     return 0;
 }
 
