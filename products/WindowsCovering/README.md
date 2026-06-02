@@ -71,14 +71,13 @@ The `app_driver_init()` function performs the following:
 
 * **Movement Control**:
   * `app_driver_drive_covering()` takes an `app_covering_action_t` (`APP_COVERING_OPEN`, `APP_COVERING_CLOSE`,
-    `APP_COVERING_STOP`). For open / close it releases the opposite relay and pulses the requested relay for ~0.5 s. For
-    stop it releases both relays.
+    `APP_COVERING_STOP`). For open / close it releases the opposite relay, pulses the requested relay for ~0.5 s, and stores
+    the direction in `last_movement`. For stop it re-pulses the last moving direction (then releases both relays).
 
-> **StopMotion behaviour**: Because open / close only pulse a relay momentarily, a later `StopMotion` finds both relays
-> already released and therefore sends **no** electrical signal. This is the correct behaviour for **continuous-contact**
-> wiring (where the relay must stay closed for the motor to keep running). On **latching / momentary** controllers — where a
-> pulse starts travel until the next button press — `StopMotion` will not stop the shade as-is; such controllers need an
-> explicit stop pulse (e.g. re-pulsing the moving direction), which would require tracking the last movement direction.
+> **StopMotion behaviour**: The driver tracks the last commanded direction in `last_movement`. On `StopMotion` it re-pulses
+> that direction's relay, emulating the "press during travel = stop" behaviour of **latching / momentary** controllers, and
+> then releases both relays. On **continuous-contact** wiring the final release also stops the motor. If no movement is
+> active (`last_movement == APP_COVERING_STOP`) the driver only releases the relays.
 
 * **Event Handling**:
   * `app_driver_event_handler()` prints lifecycle events received from the low-code system. Without LEDs, events are surfaced

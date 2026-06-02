@@ -36,6 +36,11 @@
 
 static const char *TAG = "app_driver";
 
+/* Last commanded movement direction. On a latching / momentary controller a
+ * pulse starts travel until the next button press, so we remember the active
+ * direction and re-pulse that relay on StopMotion to emulate the stop press. */
+static app_covering_action_t last_movement = APP_COVERING_STOP;
+
 static void busy_wait_half_second(void)
 {
     /*
@@ -100,16 +105,30 @@ int app_driver_drive_covering(uint16_t endpoint_id, app_covering_action_t action
             /* Make sure the opposite direction is not engaged before moving */
             relay_driver_set_power(RELAY_CLOSE_GPIO_NUM, RELAY_RELEASED);
             pulse_relay(RELAY_OPEN_GPIO_NUM);
+            last_movement = APP_COVERING_OPEN;
             break;
         case APP_COVERING_CLOSE:
             printf("%s: Covering close (pulse close relay)\n", TAG);
             relay_driver_set_power(RELAY_OPEN_GPIO_NUM, RELAY_RELEASED);
             pulse_relay(RELAY_CLOSE_GPIO_NUM);
+            last_movement = APP_COVERING_CLOSE;
             break;
         case APP_COVERING_STOP:
         default:
-            printf("%s: Covering stop (release relays)\n", TAG);
+            if (last_movement == APP_COVERING_OPEN || last_movement == APP_COVERING_CLOSE) {
+                /* Re-pulse the moving direction so a latching / momentary
+                 * controller interprets it as the stop press. */
+                gpio_num_t stop_gpio = (last_movement == APP_COVERING_OPEN)
+                                           ? RELAY_OPEN_GPIO_NUM
+                                           : RELAY_CLOSE_GPIO_NUM;
+                printf("%s: Covering stop (pulse %s relay)\n", TAG,
+                       last_movement == APP_COVERING_OPEN ? "open" : "close");
+                pulse_relay(stop_gpio);
+            } else {
+                printf("%s: Covering stop (release relays)\n", TAG);
+            }
             release_all_relays();
+            last_movement = APP_COVERING_STOP;
             break;
     }
 
