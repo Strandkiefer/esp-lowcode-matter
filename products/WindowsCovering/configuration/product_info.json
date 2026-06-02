@@ -4,9 +4,9 @@
     "product_id": 32768,
     "origin_vendor_id": 65521,
     "origin_product_id": 32768,
-    "device_type_id": 266,
+    "device_type_id": 514,
     "vendor_name": "Espressif",
-    "product_name": "Matter Product",
+    "product_name": "Matter Window Covering",
     "hw_ver": 1,
     "hw_ver_str": "1",
     "chip": "esp32c6",
@@ -14,6 +14,6 @@
     "module": "ESP32-C6-MINI-1",
     "flash_size": "4MB",
     "secure_boot": "enabled",
-    "product_type": "socket",
+    "product_type": "window_covering",
     "solution_type": "low_code"
 }
