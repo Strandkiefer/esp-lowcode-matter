@@ -95,6 +95,10 @@ int feature_update_from_system(low_code_feature_data_t *data)
     uint32_t attribute_id = data->details.low_level.matter.attribute_id;
     uint32_t command_id = data->details.low_level.matter.command_id;
 
+    printf("%s: feature_update ep=%u feat=%u cluster=0x%04x attr=0x%04x cmd=0x%04x\n",
+           TAG, endpoint_id, (unsigned)feature_id, (unsigned)cluster_id,
+           (unsigned)attribute_id, (unsigned)command_id);
+
     if (endpoint_id != 1) {
         return 0;
     }
