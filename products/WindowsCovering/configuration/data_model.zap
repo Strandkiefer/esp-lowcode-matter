@@ -2265,27 +2265,27 @@
       "id": 2,
       "name": "Anonymous Endpoint Type",
       "deviceTypeRef": {
-        "code": 514,
+        "code": 266,
         "profileId": 259,
-        "label": "MA-windowcovering",
-        "name": "MA-windowcovering"
+        "label": "MA-onoffpluginunit",
+        "name": "MA-onoffpluginunit"
       },
       "deviceTypes": [
         {
-          "code": 514,
+          "code": 266,
           "profileId": 259,
-          "label": "MA-windowcovering",
-          "name": "MA-windowcovering"
+          "label": "MA-onoffpluginunit",
+          "name": "MA-onoffpluginunit"
         }
       ],
       "deviceVersions": [
         1
       ],
       "deviceIdentifiers": [
-        514
+        266
       ],
-      "deviceTypeName": "MA-windowcovering",
-      "deviceTypeCode": 514,
+      "deviceTypeName": "MA-onoffpluginunit",
+      "deviceTypeCode": 266,
       "deviceTypeProfileId": 259,
       "clusters": [
         {

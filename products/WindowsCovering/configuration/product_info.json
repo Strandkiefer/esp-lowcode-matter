@@ -4,7 +4,7 @@
     "product_id": 32768,
     "origin_vendor_id": 65521,
     "origin_product_id": 32768,
-    "device_type_id": 514,
+    "device_type_id": 266,
     "vendor_name": "Espressif",
     "product_name": "Matter Window Covering",
     "hw_ver": 1,
