@@ -13,133 +13,69 @@
 // limitations under the License.
 
 #include <stdio.h>
-#include <stdint.h>
 
 #include <system.h>
 #include <low_code.h>
-
 #include <relay_driver.h>
+#include <ulp_lp_core_utils.h>
 #include <hal/gpio_types.h>
-#include "sdkconfig.h"
 
 #include "app_priv.h"
 
-/* Relay 1 drives the "open / up" direction, relay 2 the "close / down"
- * direction of a single motorised covering. */
-#define RELAY_OPEN_GPIO_NUM  ((gpio_num_t)1)
-#define RELAY_CLOSE_GPIO_NUM ((gpio_num_t)2)
+/* Endpoint 1 → GPIO1 ("Auf"), Endpoint 2 → GPIO2 ("Zu").
+ * Relays are active-low: GPIO low = energised. */
+#define RELAY1_GPIO_NUM  ((gpio_num_t)1)
+#define RELAY2_GPIO_NUM  ((gpio_num_t)2)
+#define RELAY_ON         false
+#define RELAY_OFF        true
 
-/* The relays are wired active-low: driving the GPIO low energises the relay,
- * driving it high releases it. */
-#define RELAY_ENERGIZED      false
-#define RELAY_RELEASED       true
+#define PULSE_DURATION_US 500000UL   /* 500 ms */
 
 static const char *TAG = "app_driver";
 
-/* Last commanded movement direction. On a latching / momentary controller a
- * pulse starts travel until the next button press, so we remember the active
- * direction and re-pulse that relay on StopMotion to emulate the stop press. */
-static app_covering_action_t last_movement = APP_COVERING_STOP;
-
-static void busy_wait_half_second(void)
-{
-    /*
-     * Estimate the number of loop iterations required to reach roughly 500 ms.
-     * Each loop expands to a handful of RISC-V instructions, so dividing the
-     * CPU frequency by a small constant yields a coarse but repeatable delay
-     * without relying on timers that are unavailable to the LP core.
-     */
-#if defined(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ)
-    const uint32_t cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
-#elif defined(CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ)
-    const uint32_t cpu_freq_mhz = CONFIG_ESP_SYSTEM_DEFAULT_CPU_FREQ_MHZ;
-#else
-    const uint32_t cpu_freq_mhz = 160;
-#endif
-    uint32_t iterations = (cpu_freq_mhz * 25000UL) / 3UL;
-    if (iterations == 0) {
-        iterations = 1;
-    }
-
-    uint32_t counter = 0;
-    while (counter < iterations) {
-        __asm__ __volatile__("nop");
-        ++counter;
-    }
-}
-
-static void pulse_relay(gpio_num_t relay_gpio)
-{
-    relay_driver_set_power(relay_gpio, RELAY_ENERGIZED);
-    busy_wait_half_second();
-    relay_driver_set_power(relay_gpio, RELAY_RELEASED);
-}
-
-static void release_all_relays(void)
-{
-    relay_driver_set_power(RELAY_OPEN_GPIO_NUM, RELAY_RELEASED);
-    relay_driver_set_power(RELAY_CLOSE_GPIO_NUM, RELAY_RELEASED);
-}
-
 int app_driver_init()
 {
-    /* Initialize both relays in the released (resting) state */
-    relay_driver_init(RELAY_OPEN_GPIO_NUM);
-    relay_driver_init(RELAY_CLOSE_GPIO_NUM);
-    release_all_relays();
+    relay_driver_init(RELAY1_GPIO_NUM);
+    relay_driver_set_power(RELAY1_GPIO_NUM, RELAY_OFF);
+
+    relay_driver_init(RELAY2_GPIO_NUM);
+    relay_driver_set_power(RELAY2_GPIO_NUM, RELAY_OFF);
 
     printf("%s: App driver initialized\n", TAG);
     return 0;
 }
 
-int app_driver_drive_covering(uint16_t endpoint_id, app_covering_action_t action)
+int app_driver_pulse_channel(uint16_t endpoint_id)
 {
-    if (endpoint_id != 1) {
-        printf("%s: Invalid endpoint %u\n", TAG, endpoint_id);
-        return -1;
-    }
+    gpio_num_t gpio = (endpoint_id == 1) ? RELAY1_GPIO_NUM : RELAY2_GPIO_NUM;
 
-    switch (action) {
-        case APP_COVERING_OPEN:
-            printf("%s: Covering open (pulse open relay)\n", TAG);
-            /* Make sure the opposite direction is not engaged before moving */
-            relay_driver_set_power(RELAY_CLOSE_GPIO_NUM, RELAY_RELEASED);
-            pulse_relay(RELAY_OPEN_GPIO_NUM);
-            last_movement = APP_COVERING_OPEN;
-            break;
-        case APP_COVERING_CLOSE:
-            printf("%s: Covering close (pulse close relay)\n", TAG);
-            relay_driver_set_power(RELAY_OPEN_GPIO_NUM, RELAY_RELEASED);
-            pulse_relay(RELAY_CLOSE_GPIO_NUM);
-            last_movement = APP_COVERING_CLOSE;
-            break;
-        case APP_COVERING_STOP:
-        default:
-            if (last_movement == APP_COVERING_OPEN || last_movement == APP_COVERING_CLOSE) {
-                /* Re-pulse the moving direction so a latching / momentary
-                 * controller interprets it as the stop press. */
-                gpio_num_t stop_gpio = (last_movement == APP_COVERING_OPEN)
-                                           ? RELAY_OPEN_GPIO_NUM
-                                           : RELAY_CLOSE_GPIO_NUM;
-                printf("%s: Covering stop (pulse %s relay)\n", TAG,
-                       last_movement == APP_COVERING_OPEN ? "open" : "close");
-                pulse_relay(stop_gpio);
-            } else {
-                printf("%s: Covering stop (release relays)\n", TAG);
-            }
-            release_all_relays();
-            last_movement = APP_COVERING_STOP;
-            break;
-    }
+    printf("%s: Pulse channel %u (GPIO%d)\n", TAG, endpoint_id, (int)gpio);
+
+    relay_driver_set_power(gpio, RELAY_ON);
+    ulp_lp_core_delay_us(PULSE_DURATION_US);
+    relay_driver_set_power(gpio, RELAY_OFF);
+
+    /* Report state back to Off so the Matter attribute stays consistent. */
+    bool off = false;
+    low_code_feature_data_t update = {
+        .details = {
+            .endpoint_id = endpoint_id,
+            .feature_id  = LOW_CODE_FEATURE_ID_POWER,
+        },
+        .value = {
+            .type      = LOW_CODE_VALUE_TYPE_BOOLEAN,
+            .value_len = sizeof(bool),
+            .value     = (uint8_t *)&off,
+        },
+    };
+    low_code_feature_update_to_system(&update);
 
     return 0;
 }
 
 int app_driver_event_handler(low_code_event_t *event)
 {
-    /* Get the events. Approriate indicators should be shown to the user based on the event. */
     printf("%s: Received event: %d\n", TAG, event->event_type);
-    /* Handle the events from low_code_event_type_t */
     switch (event->event_type) {
         case LOW_CODE_EVENT_SETUP_MODE_START:
             printf("%s: Setup mode started\n", TAG);
@@ -181,21 +117,20 @@ int app_driver_event_handler(low_code_event_t *event)
             printf("%s: Identification stopped\n", TAG);
             break;
         case LOW_CODE_EVENT_TEST_MODE_LOW_CODE:
-            printf("%s: Low code test mode is triggered for subtype: %d\n", TAG, (int)*((int*)(event->event_data)));
+            printf("%s: Low code test mode subtype: %d\n", TAG, (int)*((int *)(event->event_data)));
             break;
         case LOW_CODE_EVENT_TEST_MODE_COMMON:
-            printf("%s: common test mode triggered\n", TAG);
+            printf("%s: Common test mode triggered\n", TAG);
             break;
         case LOW_CODE_EVENT_TEST_MODE_BLE:
-            printf("%s: ble test mode triggered\n", TAG);
+            printf("%s: BLE test mode triggered\n", TAG);
             break;
         case LOW_CODE_EVENT_TEST_MODE_SNIFFER:
-            printf("%s: sniffer test mode triggered\n", TAG);
+            printf("%s: Sniffer test mode triggered\n", TAG);
             break;
         default:
             printf("%s: Unhandled event type: %d\n", TAG, event->event_type);
             break;
     }
-
     return 0;
 }

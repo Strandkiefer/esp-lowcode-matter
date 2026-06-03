@@ -17,22 +17,13 @@
 #include <stdint.h>
 #include <low_code.h>
 
-/* Movement action requested for the covering */
-typedef enum {
-    APP_COVERING_STOP = 0,   /*!< Stop any motion (release both relays) */
-    APP_COVERING_OPEN,       /*!< Move up / open */
-    APP_COVERING_CLOSE,      /*!< Move down / close */
-} app_covering_action_t;
+/* Pulse the relay on the given endpoint for 500 ms, then report Off. */
+int app_driver_pulse_channel(uint16_t endpoint_id);
 
-/* Driver functions */
+/* Driver initialization */
 int app_driver_init();
 
-/* Drive the covering. A short relay pulse emulates a momentary wall switch
- * press for the open or close direction. APP_COVERING_STOP releases both
- * relays. */
-int app_driver_drive_covering(uint16_t endpoint_id, app_covering_action_t action);
-
-/* Events handler */
+/* Event handler */
 int app_driver_event_handler(low_code_event_t *event);
 
 /* Callbacks from system */
