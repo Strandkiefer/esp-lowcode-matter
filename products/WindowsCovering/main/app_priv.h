@@ -17,15 +17,19 @@
 #include <stdint.h>
 #include <low_code.h>
 
-/* Pulse the relay on the given endpoint for 500 ms, then report Off. */
+/*
+ * Pulse the relay assigned to endpoint_id for 500 ms (active-low),
+ * then report POWER=false back to the HP-Core so the Matter OnOff
+ * attribute is reset to Off.
+ *
+ * endpoint_id 1 → GPIO1 (Relais "Auf")
+ * endpoint_id 2 → GPIO2 (Relais "Zu")
+ */
 int app_driver_pulse_channel(uint16_t endpoint_id);
 
-/* Driver initialization */
 int app_driver_init();
-
-/* Event handler */
 int app_driver_event_handler(low_code_event_t *event);
 
-/* Callbacks from system */
+/* LP-Core callbacks registered via low_code_register_callbacks() */
 int feature_update_from_system(low_code_feature_data_t *data);
 int event_from_system(low_code_event_t *event);

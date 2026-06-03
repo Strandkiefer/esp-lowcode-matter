@@ -33,21 +33,47 @@ static void loop()
     low_code_get_event_from_system();
 }
 
+/*
+ * Called by the HP-Core whenever a Matter attribute update or command
+ * is forwarded to the LP-Core.
+ *
+ * ENDPOINT ROUTING (FIX):
+ *   The HP-Core sets data->details.endpoint_id to the Matter endpoint
+ *   that received the command.  We must check this field explicitly to
+ *   route EP1 → Relay 1 and EP2 → Relay 2.
+ *   Both endpoints share the same On/Off cluster (feature_id ==
+ *   LOW_CODE_FEATURE_ID_POWER).  Only the endpoint_id differs.
+ *
+ * WHY feature_update IS CALLED NOW:
+ *   The data model must expose two On/Off Plug-in Unit endpoints
+ *   (device type 0x010A), not Window Covering (0x0202).  Only then
+ *   does Apple Home send On/Off commands and the HP-Core forward them
+ *   as POWER feature updates.  With WC device type the HP-Core receives
+ *   UpOrOpen/DownOrClose for cluster 0x0102 and never calls this
+ *   callback.
+ */
 int feature_update_from_system(low_code_feature_data_t *data)
 {
     uint16_t endpoint_id = data->details.endpoint_id;
     uint32_t feature_id  = data->details.feature_id;
 
-    if ((endpoint_id == 1 || endpoint_id == 2) &&
-        feature_id == LOW_CODE_FEATURE_ID_POWER &&
-        data->value.value != NULL) {
+    /* [CHANGED] Log every call so we can verify the callback fires
+     * and confirm which endpoint_id the HP-Core sends. */
+    printf("%s: feature_update ep=%u feat=%u\n", TAG, endpoint_id, (unsigned)feature_id);
 
+    /* [CHANGED] Explicit check for EP1 and EP2 with POWER feature. */
+    if (feature_id == LOW_CODE_FEATURE_ID_POWER && data->value.value != NULL) {
         bool on = *(bool *)data->value.value;
-        printf("%s: ep=%u power=%d\n", TAG, endpoint_id, on);
+        printf("%s: ep=%u On/Off=%d\n", TAG, endpoint_id, on);
 
         if (on) {
-            app_driver_pulse_channel(endpoint_id);
+            if (endpoint_id == 1 || endpoint_id == 2) {
+                app_driver_pulse_channel(endpoint_id);
+            } else {
+                printf("%s: Ignoring unknown endpoint %u\n", TAG, endpoint_id);
+            }
         }
+        /* Off: nothing to do – relay is already released after the pulse. */
     }
 
     return 0;
